@@ -1,0 +1,55 @@
+services:
+
+  # the keycloak service
+  keycloak:
+    image: quay.io/keycloak/keycloak:${KC_VERSION}
+    command: ["start"]
+    ports:
+      - "${KEYCLOAK_PORT}:8080"
+    env_file:
+      - ./config/keycloak.env
+      - ./.env
+    restart: unless-stopped
+    depends_on:
+      postgresd:
+        condition: service_healthy
+    networks:
+      - net1
+    
+  # Run a postgres instance with a persistant data volume.
+  postgresd:
+    image: postgres:${POSTGRES_VERSION}
+    healthcheck:
+      test: "exit 0"
+    ports:
+      - "5432:5432"
+    volumes:
+      - type: bind
+        source: ./instance/database
+        target: /var/lib/postgresql/data
+    env_file:
+      - ./config/postgres.env
+    restart: unless-stopped
+    networks:
+      - net1
+
+  # Scheduled database backups
+  pgbackups:
+    image: prodrigestivill/postgres-backup-local:latest
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ./instance/database/mbackups
+        target: /backups
+    depends_on:
+      postgresd:
+        condition: service_healthy
+    env_file:
+      - ./config/postgres-backup.env
+    networks:
+      - net1
+
+networks:
+  net1:
+    name: container_network
+    external: true
